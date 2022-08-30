@@ -52,7 +52,6 @@ func main() {
 		_, _ = w.Write(([]byte)(reply))
 	}))
 	http.Handle("/", r)
-	fmt.Println("Now listen port 8080, you can visit 127.0.0.1:8080/users/xxx .")
 	_ = http.ListenAndServe(":8080", nil)
 }
 
