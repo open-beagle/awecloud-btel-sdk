@@ -16,16 +16,21 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
+	"time"
 
-	"go.opentelemetry.io/otel/attribute"
+	_ "github.com/go-sql-driver/mysql"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 
+	"github.com/XSAM/otelsql"
 	"github.com/gorilla/mux"
 	"github.com/open-beagle/awecloud-btel-sdk/btrace"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
-	"go.opentelemetry.io/otel/trace"
 )
+
+var mysqlDSN = "root:passwd123@tcp(k8s.wodcloud.com:33082)/trace?parseTime=true"
 
 func main() {
 
@@ -41,11 +46,9 @@ func main() {
 
 	r := mux.NewRouter()
 	r.Use(otelmux.Middleware("my-server"))
-	r.HandleFunc("/users/{id:[0-9]+}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		id := vars["id"]
-		name := getUser(r.Context(), id)
-		reply := fmt.Sprintf("user %s (id %s)\n", name, id)
+	r.HandleFunc("/current", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time := queryDb(r.Context())
+		reply := fmt.Sprintf("CURRENT_TIMESTAMP: %s \n", time)
 		_, _ = w.Write(([]byte)(reply))
 	}))
 	http.Handle("/", r)
@@ -53,15 +56,38 @@ func main() {
 	_ = http.ListenAndServe(":8080", nil)
 }
 
-func getUser(ctx context.Context, id string) string {
-	if id == "123" {
-		return "otelmux tester"
+func queryDb(ctx context.Context) string {
+	db, err := otelsql.Open("mysql", mysqlDSN, otelsql.WithAttributes(
+		semconv.DBSystemMySQL,
+	))
+	if err != nil {
+		panic(err)
 	}
-	// 如果需要记录一些事件，可以获取Context中的span并添加Event（非必要步骤）
-	span := trace.SpanFromContext(ctx)
-	span.AddEvent("unknown user id : "+id, trace.WithAttributes(attribute.KeyValue{
-		Key:   "label-key-1",
-		Value: attribute.StringValue("label-value-1"),
-	}))
-	return "unknown"
+	defer db.Close()
+
+	err = otelsql.RegisterDBStatsMetrics(db, otelsql.WithAttributes(
+		semconv.DBSystemMySQL,
+	))
+	if err != nil {
+		panic(err)
+	}
+	t, _ := query(ctx, db)
+	return t.String()
+}
+
+func query(ctx context.Context, db *sql.DB) (t time.Time, err error) {
+	// Make a query
+	rows, err := db.QueryContext(ctx, `SELECT CURRENT_TIMESTAMP`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(&t)
+		if err != nil {
+			return
+		}
+	}
+	return
 }
