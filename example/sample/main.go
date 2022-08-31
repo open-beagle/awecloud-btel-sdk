@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,18 +9,11 @@ import (
 
 	"github.com/open-beagle/awecloud-btel-sdk/btrace"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.uber.org/zap/zapcore"
 )
 
 func main() {
-	config, err := btrace.NewConfig()
-	// 使用panic()，表示如果初始化失败则程序直接异常退出，您也可以使用其他错误处理方式。
-	if err != nil {
-		panic(err)
-	}
-	if err := btrace.Start(config); err != nil {
-		panic(err)
-	}
-	defer btrace.Shutdown(config)
+	btrace.New(context.Background())
 
 	helloHandler := func(w http.ResponseWriter, req *http.Request) {
 		if time.Now().Unix()%10 == 0 {
@@ -41,8 +35,25 @@ func main() {
 
 	http.Handle("/hello", otelHandler)
 	fmt.Println("Now listen port 8080, you can visit 127.0.0.1:8080/hello .")
-	err = http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		panic(err)
+	}
+}
+
+// init log config
+func initLogConfig() zapcore.EncoderConfig {
+	return zapcore.EncoderConfig{
+		TimeKey:        "timestamp",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      "caller",
+		MessageKey:     "msg",
+		StacktraceKey:  "stacktrace",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapcore.CapitalLevelEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 }

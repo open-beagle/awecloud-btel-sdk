@@ -33,16 +33,7 @@ import (
 var mysqlDSN = "root:passwd123@tcp(k8s.wodcloud.com:33082)/trace?parseTime=true"
 
 func main() {
-
-	slsConfig, err := btrace.NewConfig()
-	// 如果初始化失败则panic，可以替换为其他错误处理方式
-	if err != nil {
-		panic(err)
-	}
-	if err := btrace.Start(slsConfig); err != nil {
-		panic(err)
-	}
-	defer btrace.Shutdown(slsConfig)
+	btrace.New(context.Background())
 
 	r := mux.NewRouter()
 	r.Use(otelmux.Middleware("my-server"))
