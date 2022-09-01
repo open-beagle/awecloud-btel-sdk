@@ -21,13 +21,13 @@ rm -rf .tmp/awecloud-btel-sdk.out
 
 ```bash
 # 新建一个Tag
-git tag v1.0.0-beagle.4
+git tag v1.0.0-beagle.5
 
 # 推送一个Tag ，-f 强制更新
-git push -f origin v1.0.0-beagle.4
+git push -f origin v1.0.0-beagle.5
 
 # 删除本地Tag
-git tag -d v1.0.0-beagle.4
+git tag -d v1.0.0-beagle.5
 ```
 
 ## realse
