@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,7 +12,9 @@ import (
 )
 
 func main() {
-	btrace.New(context.Background())
+	if tracer := btrace.New(); tracer != nil {
+		defer tracer.Shutdown()
+	}
 
 	helloHandler := func(w http.ResponseWriter, req *http.Request) {
 		if time.Now().Unix()%10 == 0 {

@@ -33,7 +33,9 @@ import (
 var mysqlDSN = "root:passwd123@tcp(k8s.wodcloud.com:33082)/trace?parseTime=true"
 
 func main() {
-	btrace.New(context.Background())
+	if tracer := btrace.New(); tracer != nil {
+		defer tracer.Shutdown()
+	}
 
 	r := mux.NewRouter()
 	r.Use(otelmux.Middleware("my-server"))

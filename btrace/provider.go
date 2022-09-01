@@ -46,9 +46,9 @@ func (c *Tracer) isValid() error {
 
 type Option func(*Tracer)
 
-func New(ctx context.Context, opts ...Option) *Tracer {
+func New(opts ...Option) *Tracer {
 	var c Tracer
-	c.ctx = ctx
+	c.ctx = context.Background()
 	// 日志
 	c.setLogger()
 	// 1. load env config
@@ -74,14 +74,6 @@ func New(ctx context.Context, opts ...Option) *Tracer {
 		c.log.Error("btel", zap.Error(err))
 		return nil
 	}
-	go func(ctx context.Context) {
-		for {
-			select {
-			case <-ctx.Done():
-				shutdown(&c)
-			}
-		}
-	}(ctx)
 	return &c
 }
 
@@ -110,6 +102,13 @@ func (t *Tracer) setLogger() {
 	atom.UnmarshalText([]byte("debug"))
 }
 
+// Shutdown 优雅关闭，将OpenTelemetry SDK内存中的数据发送到服务端
+func (t *Tracer) Shutdown() {
+	for _, stop := range t.stop {
+		stop()
+	}
+}
+
 // 初始化Traces，默认全量上传
 func (c *Tracer) initTracer(traceExporter trace.SpanExporter, stop func()) error {
 	if traceExporter == nil {
@@ -127,7 +126,7 @@ func (c *Tracer) initTracer(traceExporter trace.SpanExporter, stop func()) error
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 	c.stop = append(c.stop, func() {
-		tp.Shutdown(context.Background())
+		tp.Shutdown(c.ctx)
 		stop()
 	})
 	return nil
@@ -181,13 +180,6 @@ func start(c *Tracer) error {
 	return err
 }
 
-// Shutdown 优雅关闭，将OpenTelemetry SDK内存中的数据发送到服务端
-func shutdown(c *Tracer) {
-	for _, stop := range c.stop {
-		stop()
-	}
-}
-
 // 初始化Exporter，如果otlpEndpoint传入的值为 stdout，则默认把信息打印到标准输出用于调试
 func (c *Tracer) initOtelExporter(otlpEndpoint string, insecure1 bool) (trace.SpanExporter, func(), error) {
 	var traceExporter trace.SpanExporter
@@ -195,7 +187,7 @@ func (c *Tracer) initOtelExporter(otlpEndpoint string, insecure1 bool) (trace.Sp
 
 	var exporterStop = func() {
 		if traceExporter != nil {
-			traceExporter.Shutdown(context.Background())
+			traceExporter.Shutdown(c.ctx)
 		}
 	}
 
