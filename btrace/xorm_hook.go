@@ -2,6 +2,7 @@ package btrace
 
 import (
 	"context"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -37,8 +38,9 @@ func (h *oteltraceHook) BeforeProcess(c *contexts.ContextHook) (context.Context,
 		attribute.String("db.name", h.engine.Dialect().URI().DBName),
 		attribute.String("db.system", string(h.engine.Dialect().URI().DBType)),
 		attribute.String("db.user", h.engine.Dialect().URI().User),
+		attribute.String("db.operation", getSqlOperation(c.SQL)),
 	}
-	_, iSpan := h.tracer.Start(c.Ctx, c.SQL, trace.WithAttributes(commonAttrs...))
+	_, iSpan := h.tracer.Start(c.Ctx, getSqlOperation(c.SQL)+" "+h.engine.Dialect().URI().DBName, trace.WithAttributes(commonAttrs...))
 	ctx := context.WithValue(c.Ctx, "xorm span", iSpan)
 	return ctx, nil
 }
@@ -47,4 +49,14 @@ func (h *oteltraceHook) AfterProcess(c *contexts.ContextHook) error {
 	span := c.Ctx.Value("xorm span").(oteltrace.Span)
 	defer span.End()
 	return nil
+}
+
+func getSqlOperation(sql string) string {
+	arr := strings.Split(sql, " ")
+	for _, v := range arr {
+		if v != "" {
+			return v
+		}
+	}
+	return "Unknow"
 }
