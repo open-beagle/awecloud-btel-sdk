@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"xorm.io/xorm"
@@ -48,6 +49,10 @@ func (h *oteltraceHook) BeforeProcess(c *contexts.ContextHook) (context.Context,
 func (h *oteltraceHook) AfterProcess(c *contexts.ContextHook) error {
 	span := c.Ctx.Value("xorm span").(oteltrace.Span)
 	defer span.End()
+	if c.Err != nil {
+		span.RecordError(c.Err)
+		span.SetStatus(codes.Error, c.Err.Error())
+	}
 	return nil
 }
 

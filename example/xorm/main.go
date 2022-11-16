@@ -79,6 +79,6 @@ func query(ctx context.Context) (res interface{}, err error) {
 	// 将子上下文传入Session
 	session := db.Context(ctx)
 	u := []User{}
-	err = session.Table("cuser").Find(&u)
+	err = session.Table("cuserxx").Find(&u)
 	return u, err
 }
