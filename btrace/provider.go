@@ -220,6 +220,7 @@ func (c *Tracer) initTracerResource() *resource.Resource {
 	resources, _ := resource.New(c.ctx,
 		resource.WithDetectors(bresource.FromEnv{}), // pull attributes from OTEL_RESOURCE_ATTRIBUTES and OTEL_SERVICE_NAME environment variables
 		resource.WithProcess(),                      // This option configures a set of Detectors that discover process information
+		bresource.WithOtherProcess(),
 	)
 	return resources
 }

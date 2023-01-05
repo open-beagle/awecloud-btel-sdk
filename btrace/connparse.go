@@ -42,7 +42,7 @@ func connParse(driver, conn string) (connection, user, dbName string) {
 			connection = host + ":" + port
 		}
 	case "sqlite3":
-	case "mysql": // root:password@tcp(mysql.istio-samples.svc.cluster.local:3306)/test root:password@(mysql.istio-samples:3306)/ysgz-ys?charset=utf8mb4
+	case "mysql", "mssql": // root:password@tcp(mysql.istio-samples.svc.cluster.local:3306)/test root:password@(mysql.istio-samples:3306)/ysgz-ys?charset=utf8mb4
 		arr := strings.Split(conn, "@")
 		user = strings.Split(arr[0], ":")[0]
 		connection = strings.Split(arr[1], "/")[0]
@@ -54,9 +54,35 @@ func connParse(driver, conn string) (connection, user, dbName string) {
 		if strings.Contains(dbName, "?") {
 			dbName = strings.Split(dbName, "?")[0]
 		}
-	case "mssql":
-	case "oracle":
-	case "dameng":
+	case "oracle", "oci8": // cigproxy/cigproxy@106.3.44.26:11421/xe
+		arr := strings.Split(conn, "@")
+		user = strings.Split(arr[0], "/")[0]
+		connection = strings.Split(arr[1], "/")[0]
+		if strings.HasPrefix(connection, "(") {
+			connection = strings.ReplaceAll(connection, "(", "")
+			connection = strings.ReplaceAll(connection, ")", "")
+		}
+		dbName = strings.Split(arr[1], "/")[1]
+		if strings.Contains(dbName, "?") {
+			dbName = strings.Split(dbName, "?")[0]
+		}
+	case "dameng", "odbc": // driver={DM8 ODBC DRIVER};server=192.168.112.128:5236;database=DAMENG;uid=SYSDBA;pwd=SYSDBA;charset=utf8
+		arr := strings.Split(conn, ";")
+		for _, v := range arr {
+			if strings.Contains(v, "=") {
+				if strings.Contains(v, "=") {
+					kv := strings.Split(v, "=")
+					switch kv[0] {
+					case "server":
+						connection = kv[1]
+					case "database":
+						dbName = kv[1]
+					case "uid":
+						user = kv[1]
+					}
+				}
+			}
+		}
 	}
 	return
 }
