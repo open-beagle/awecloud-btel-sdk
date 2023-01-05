@@ -5,11 +5,11 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/shirou/gopsutil/host"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
 	otelresource "go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
-	"golang.org/x/sys/unix"
 )
 
 func WithOtherProcess() resource.Option {
@@ -42,9 +42,8 @@ func (telemetrySdkLanguage) Detect(context.Context) (*otelresource.Resource, err
 type osDescription struct{}
 
 func (osDescription) Detect(context.Context) (*otelresource.Resource, error) {
-	utsname := unix.Utsname{}
-	unix.Uname(&utsname)
-	description := charToString(utsname.Sysname[:]) + " " + charToString(utsname.Release[:])
+	h, _ := host.Info()
+	description := h.OS + " " + h.KernelVersion
 	return resource.NewWithAttributes(semconv.SchemaURL, attribute.String("os.description", description)), nil
 }
 
