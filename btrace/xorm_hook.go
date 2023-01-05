@@ -33,12 +33,13 @@ func WrapEngine(e *xorm.Engine, tracer oteltrace.Tracer) {
 }
 
 func (h *oteltraceHook) BeforeProcess(c *contexts.ContextHook) (context.Context, error) {
+	connect, user, dbName := connParse(string(h.engine.Dialect().URI().DBType), h.engine.DataSourceName())
 	commonAttrs := []attribute.KeyValue{
 		attribute.String("db.statement", c.SQL),
-		attribute.String("db.connection_string", h.engine.DataSourceName()),
-		attribute.String("db.name", h.engine.Dialect().URI().DBName),
+		attribute.String("db.connection_string", connect),
+		attribute.String("db.name", dbName),
 		attribute.String("db.system", string(h.engine.Dialect().URI().DBType)),
-		attribute.String("db.user", h.engine.Dialect().URI().User),
+		attribute.String("db.user", user),
 		attribute.String("db.operation", getSqlOperation(c.SQL)),
 	}
 	_, iSpan := h.tracer.Start(c.Ctx, getSqlOperation(c.SQL)+" "+h.engine.Dialect().URI().DBName, trace.WithAttributes(commonAttrs...))
