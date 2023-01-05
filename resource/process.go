@@ -2,15 +2,14 @@ package resource
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"strings"
-	"syscall"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
 	otelresource "go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
+	"golang.org/x/sys/unix"
 )
 
 func WithOtherProcess() resource.Option {
@@ -43,9 +42,9 @@ func (telemetrySdkLanguage) Detect(context.Context) (*otelresource.Resource, err
 type osDescription struct{}
 
 func (osDescription) Detect(context.Context) (*otelresource.Resource, error) {
-	utsname := syscall.Utsname{}
-	syscall.Uname(&utsname)
-	description := charToString(utsname.Sysname) + " " + charToString(utsname.Release)
+	utsname := unix.Utsname{}
+	unix.Uname(&utsname)
+	description := charToString(utsname.Sysname[:]) + " " + charToString(utsname.Release[:])
 	return resource.NewWithAttributes(semconv.SchemaURL, attribute.String("os.description", description)), nil
 }
 
@@ -55,12 +54,13 @@ func (osType) Detect(context.Context) (*otelresource.Resource, error) {
 	return resource.NewWithAttributes(semconv.SchemaURL, attribute.String("os.type", runtime.GOOS)), nil
 }
 
-func charToString(c [65]int8) (str string) {
-	for _, v := range c {
-		if v == 0 {
-			continue
+func charToString(arr []byte) string {
+	b := make([]byte, 0, len(arr))
+	for _, v := range arr {
+		if v == 0x00 {
+			break
 		}
-		str += fmt.Sprintf("%c", v)
+		b = append(b, byte(v))
 	}
-	return str
+	return string(b)
 }
