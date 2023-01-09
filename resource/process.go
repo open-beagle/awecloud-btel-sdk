@@ -18,6 +18,7 @@ func WithOtherProcess() resource.Option {
 		telemetrySdkLanguage{},
 		osDescription{},
 		osType{},
+		hostArch{},
 	)
 }
 
@@ -62,4 +63,10 @@ func charToString(arr []byte) string {
 		b = append(b, byte(v))
 	}
 	return string(b)
+}
+
+type hostArch struct{}
+
+func (hostArch) Detect(context.Context) (*otelresource.Resource, error) {
+	return resource.NewWithAttributes(semconv.SchemaURL, attribute.String("host.arch", runtime.GOARCH)), nil
 }
