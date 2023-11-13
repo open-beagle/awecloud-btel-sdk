@@ -3,14 +3,19 @@ package btrace
 import (
 	"context"
 	"errors"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	bresource "github.com/open-beagle/awecloud-btel-sdk/resource"
 	"github.com/sethvargo/go-envconfig"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -19,18 +24,20 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Tracer struct {
-	BtelExporterEndpoint string `env:"BTEL_EXPORTER_OTLP_ENDPOINT"`
-	BtelServiceName      string `env:"BTEL_SERVICE_NAME"`
-	errorHandler         otel.ErrorHandler
-	Resource             *resource.Resource
-	stop                 []func()
-	ctx                  context.Context
-	log                  *zap.Logger
+	BtelExporterEndpoint     string `env:"BTEL_EXPORTER_OTLP_ENDPOINT"`
+	BtelServiceName          string `env:"BTEL_SERVICE_NAME"`
+	OtelTracesExporter       string `env:"OTEL_TRACES_EXPORTER"`
+	OtelExporterOtlpProtocol string `env:"OTEL_EXPORTER_OTLP_PROTOCOL"`
+	OtelTracesSamplerArg     string `env:"OTEL_TRACES_SAMPLER_ARG"`
+	OtelTracesSampler        string `env:"OTEL_TRACES_SAMPLER"`
+	errorHandler             otel.ErrorHandler
+	Resource                 *resource.Resource
+	stop                     []func()
+	ctx                      context.Context
+	log                      *zap.Logger
 }
 
 // IsValid check config and return error if config invalid
@@ -114,9 +121,23 @@ func (c *Tracer) initTracer(traceExporter trace.SpanExporter, stop func()) error
 	if traceExporter == nil {
 		return nil
 	}
+
+	var traceIDRatioBased float64
+
+	if len(c.OtelTracesSamplerArg) == 0 {
+		traceIDRatioBased = 1.0
+	}
+
+	f, err := strconv.ParseFloat(c.OtelTracesSamplerArg, 64)
+	if err != nil {
+		traceIDRatioBased = 1.0
+	} else {
+		traceIDRatioBased = f
+	}
+
 	// 建议使用AlwaysSample全量上传Trace数据，若您的数据太多，可以使用sdktrace.ProbabilitySampler进行采样上传
 	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(traceIDRatioBased))),
 		sdktrace.WithBatcher(
 			traceExporter,
 			sdktrace.WithMaxExportBatchSize(10),
@@ -198,9 +219,60 @@ func (c *Tracer) initOtelExporter(otlpEndpoint string, insecure1 bool) (trace.Sp
 			return nil, nil, err
 		}
 	} else if otlpEndpoint != "" {
-		ctx, cancel := context.WithTimeout(c.ctx, time.Second)
+		ctx, cancel := context.WithTimeout(c.ctx, 5*time.Second)
 		defer cancel()
+
+		ifInsecure := true
+
+		if strings.Contains(otlpEndpoint, "https") {
+			ifInsecure = false
+		}
+
+		// 去除 http://
 		otlpEndpoint = strings.TrimPrefix(otlpEndpoint, "http://")
+
+		// 去除 https://
+		otlpEndpoint = strings.TrimPrefix(otlpEndpoint, "https://")
+
+		// 指定进行 http/protobuf 发送
+		if c.OtelTracesExporter == "otlp" && c.OtelExporterOtlpProtocol == "http/protobuf" {
+			splits := strings.Split(otlpEndpoint, "/")
+
+			var cli otlptrace.Client
+
+			if len(splits) == 1 {
+				if ifInsecure {
+					cli = otlptracehttp.NewClient(otlptracehttp.WithEndpoint(otlpEndpoint), otlptracehttp.WithInsecure())
+				} else {
+					cli = otlptracehttp.NewClient(otlptracehttp.WithEndpoint(otlpEndpoint))
+				}
+
+				if traceExporter, err = otlptrace.New(ctx, cli); err != nil {
+					return nil, nil, err
+				}
+			}
+
+			if len(splits) > 1 {
+				urlPath := "/v1/traces"
+
+				otlpEndpoint = splits[0]
+
+				urlPath = strings.Join(splits[1:], "/") + "/v1/traces"
+
+				if ifInsecure {
+					cli = otlptracehttp.NewClient(otlptracehttp.WithEndpoint(otlpEndpoint), otlptracehttp.WithURLPath(urlPath), otlptracehttp.WithInsecure())
+				} else {
+					cli = otlptracehttp.NewClient(otlptracehttp.WithEndpoint(otlpEndpoint), otlptracehttp.WithURLPath(urlPath))
+				}
+
+				if traceExporter, err = otlptrace.New(ctx, cli); err != nil {
+					return nil, nil, err
+				}
+			}
+
+			return traceExporter, exporterStop, nil
+		}
+
 		conn, err := grpc.DialContext(ctx, otlpEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 		if err != nil {
 			return nil, nil, err
