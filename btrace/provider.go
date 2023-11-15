@@ -219,7 +219,7 @@ func (c *Tracer) initOtelExporter(otlpEndpoint string, insecure1 bool) (trace.Sp
 			return nil, nil, err
 		}
 	} else if otlpEndpoint != "" {
-		ctx, cancel := context.WithTimeout(c.ctx, 5*time.Second)
+		ctx, cancel := context.WithTimeout(c.ctx, 20*time.Second)
 		defer cancel()
 
 		ifInsecure := true
@@ -266,6 +266,7 @@ func (c *Tracer) initOtelExporter(otlpEndpoint string, insecure1 bool) (trace.Sp
 				}
 
 				if traceExporter, err = otlptrace.New(ctx, cli); err != nil {
+					c.log.Error("otlptrace.New", zap.Error(err))
 					return nil, nil, err
 				}
 			}
