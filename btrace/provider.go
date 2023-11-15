@@ -3,19 +3,12 @@ package btrace
 import (
 	"context"
 	"errors"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"os"
-	"strconv"
-	"strings"
-	"time"
-
 	bresource "github.com/open-beagle/awecloud-btel-sdk/resource"
 	"github.com/sethvargo/go-envconfig"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -24,6 +17,11 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"os"
+	"strconv"
+	"strings"
 )
 
 type Tracer struct {
@@ -219,8 +217,8 @@ func (c *Tracer) initOtelExporter(otlpEndpoint string, insecure1 bool) (trace.Sp
 			return nil, nil, err
 		}
 	} else if otlpEndpoint != "" {
-		ctx, cancel := context.WithTimeout(c.ctx, 20*time.Second)
-		defer cancel()
+		/*ctx, cancel := context.WithTimeout(c.ctx, 20*time.Second)
+		defer cancel()*/
 
 		ifInsecure := true
 
@@ -247,7 +245,7 @@ func (c *Tracer) initOtelExporter(otlpEndpoint string, insecure1 bool) (trace.Sp
 					cli = otlptracehttp.NewClient(otlptracehttp.WithEndpoint(otlpEndpoint))
 				}
 
-				if traceExporter, err = otlptrace.New(ctx, cli); err != nil {
+				if traceExporter, err = otlptrace.New(c.ctx, cli); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -265,7 +263,7 @@ func (c *Tracer) initOtelExporter(otlpEndpoint string, insecure1 bool) (trace.Sp
 					cli = otlptracehttp.NewClient(otlptracehttp.WithEndpoint(otlpEndpoint), otlptracehttp.WithURLPath(urlPath))
 				}
 
-				if traceExporter, err = otlptrace.New(ctx, cli); err != nil {
+				if traceExporter, err = otlptrace.New(c.ctx, cli); err != nil {
 					c.log.Error("otlptrace.New", zap.Error(err))
 					return nil, nil, err
 				}
@@ -274,13 +272,13 @@ func (c *Tracer) initOtelExporter(otlpEndpoint string, insecure1 bool) (trace.Sp
 			return traceExporter, exporterStop, nil
 		}
 
-		conn, err := grpc.DialContext(ctx, otlpEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		conn, err := grpc.DialContext(c.ctx, otlpEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 		if err != nil {
 			return nil, nil, err
 		}
 
 		// Set up a trace exporter
-		traceExporter, err = otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
+		traceExporter, err = otlptracegrpc.New(c.ctx, otlptracegrpc.WithGRPCConn(conn))
 		if err != nil {
 			return nil, nil, err
 		}
