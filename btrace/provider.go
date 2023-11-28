@@ -138,7 +138,7 @@ func (c *Tracer) initTracer(traceExporter trace.SpanExporter, stop func()) error
 		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(traceIDRatioBased))),
 		sdktrace.WithBatcher(
 			traceExporter,
-			sdktrace.WithMaxExportBatchSize(10),
+			sdktrace.WithMaxExportBatchSize(10000),
 		),
 		sdktrace.WithResource(c.Resource),
 	)
