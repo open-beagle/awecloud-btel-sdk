@@ -31,11 +31,13 @@ type Tracer struct {
 	OtelExporterOtlpProtocol string `env:"OTEL_EXPORTER_OTLP_PROTOCOL"`
 	OtelTracesSamplerArg     string `env:"OTEL_TRACES_SAMPLER_ARG"`
 	OtelTracesSampler        string `env:"OTEL_TRACES_SAMPLER"`
+	OtleMetricsExporter      string `env:"OTEL_METRICS_EXPORTER"`
 	errorHandler             otel.ErrorHandler
 	Resource                 *resource.Resource
 	stop                     []func()
 	ctx                      context.Context
 	log                      *zap.Logger
+	metCtx                   context.Context
 }
 
 // IsValid check config and return error if config invalid
@@ -54,6 +56,7 @@ type Option func(*Tracer)
 func New(opts ...Option) *Tracer {
 	var c Tracer
 	c.ctx = context.Background()
+	c.metCtx = context.Background()
 	// 日志
 	c.setLogger()
 	// 1. load env config
@@ -71,14 +74,17 @@ func New(opts ...Option) *Tracer {
 	// 3. merge resource
 	// parseEnvKeys(&c)
 	mergeResource(&c)
+
 	if err := c.isValid(); err != nil {
 		c.log.Error("btel", zap.Error(err))
 		return nil
 	}
+
 	if err := start(&c); err != nil {
 		c.log.Error("btel", zap.Error(err))
 		return nil
 	}
+
 	return &c
 }
 
@@ -196,6 +202,21 @@ func start(c *Tracer) error {
 	if err != nil {
 		return err
 	}
+
+	if c.OtleMetricsExporter == "otlp" {
+
+		success, err := c.initMeter(c.BtelExporterEndpoint)
+		if err != nil {
+			c.log.Error("btel meteric ", zap.Error(err))
+		}
+
+		if success {
+			if err = captureMetric(); err != nil {
+				c.log.Error("btel captureMetric ", zap.Error(err))
+			}
+		}
+	}
+
 	return err
 }
 
